@@ -1,0 +1,34 @@
+# Oracle Cloud (ARM / Ampere A1) — API + automatic HTTPS.
+# Caddy fetches and renews Let's Encrypt certificates on its own.
+
+services:
+  api:
+    build: .
+    restart: always                  # survives reboots and crashes
+    env_file: .env
+    environment:
+      DB_PATH: /srv/data/portfolio.db
+      SITE_PATH: /srv/site
+    volumes:
+      - ./data:/srv/data             # SQLite lives on the VM disk, survives redeploys
+      - ./site:/srv/site             # content.json + portfolio.html (Studio can update)
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./site:/srv/site:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  caddy_data:
+  caddy_config:
