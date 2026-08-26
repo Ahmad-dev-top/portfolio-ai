@@ -1,0 +1,21 @@
+# Portfolio site + Dogar API on one domain (HTTPS via Let's Encrypt).
+muhammad-dogar.duckdns.org {
+	# Dogar backend
+	handle /api* {
+		reverse_proxy api:8000
+	}
+
+	# Portfolio website (CV link → this)
+	handle {
+		root * /srv/site
+		try_files {path} /portfolio.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		-Server
+	}
+}
