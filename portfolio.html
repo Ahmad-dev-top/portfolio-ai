@@ -650,12 +650,27 @@ body.entered .dogar-fab{display:flex}
 .studio-body{flex:1;overflow-y:auto;padding:20px 22px}
 .studio-foot{display:flex;gap:10px;align-items:center;padding:16px 22px;border-top:1px solid var(--line);flex-wrap:wrap;position:relative;z-index:6;background:var(--bg2)}
 .studio-note{font-family:var(--mono);font-size:.62rem;line-height:1.6;color:var(--orange);flex:1;min-width:220px}
-#studioSave,#studioExport{position:relative;z-index:7;pointer-events:auto;cursor:pointer}
+#studioSave,#studioExport,#studioImport{position:relative;z-index:7;pointer-events:auto;cursor:pointer}
+.studio-mode.off{border:1px solid rgba(255,45,70,.5);color:var(--red)}
 .row{border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px;background:rgba(255,255,255,.02)}
 .row-top{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .row-top b{font-family:var(--intro);font-weight:600;font-size:.95rem;flex:1}
-.row-del{color:var(--mut);font-family:var(--mono);font-size:.62rem;letter-spacing:.1em}
+.row-del,.row-move{color:var(--mut);font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;padding:4px 6px;border-radius:6px}
 .row-del:hover{color:var(--red)}
+.row-move:hover:not(:disabled){color:var(--txt);background:rgba(255,255,255,.06)}
+.row-move:disabled{opacity:.25;cursor:default}
+.studio-body input.bad,.studio-body textarea.bad{border-color:var(--red)}
+.studio-body .check{display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;font-family:var(--body);font-size:.88rem;color:var(--txt);margin:14px 0 4px;cursor:pointer}
+.studio-body .check input{width:auto;accent-color:var(--orange)}
+.studio-pic{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.studio-pic img{width:84px;height:84px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
+.studio-shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-bottom:10px}
+.studio-shot{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;aspect-ratio:16/10;background:rgba(255,255,255,.03)}
+.studio-shot img{width:100%;height:100%;object-fit:cover;display:block}
+.studio-shot button{position:absolute;top:6px;right:6px;background:rgba(3,4,8,.8);color:var(--txt);font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;padding:4px 7px;border-radius:6px}
+.studio-shot button:hover{color:var(--red)}
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.shots img{width:100%;border-radius:12px;border:1px solid var(--line);display:block}
 .studio-body label{display:block;font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin:10px 0 6px}
 .studio-hint{color:var(--mut);font-size:.88rem;line-height:1.55;margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
 .studio-body input,.studio-body textarea{
@@ -980,6 +995,8 @@ body.entered .dogar-fab{display:flex}
     <div class="studio-body" id="studioBody"></div>
     <div class="studio-foot">
       <p class="studio-note" id="studioNote"></p>
+      <input type="file" id="studioImportFile" accept=".json,application/json" hidden>
+      <button type="button" class="btn btn-2 btn-sm" id="studioImport" data-cur="link">Import JSON</button>
       <button type="button" class="btn btn-2 btn-sm" id="studioExport" data-cur="link">Export JSON</button>
       <button type="button" class="btn btn-1 btn-sm" id="studioSave" data-cur="link">Apply changes</button>
     </div>
@@ -1071,6 +1088,8 @@ const CONFIG = {
 const $  = (s,c=document)=>c.querySelector(s);
 const $$ = (s,c=document)=>[...c.querySelectorAll(s)];
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// Only web links and embedded images reach an href/src — never javascript: or similar.
+const safeUrl = u => { const s=String(u||'').trim(); return /^(https?:\/\/|mailto:|data:image\/)/i.test(s) ? s : ''; };
 const val = (v,label) => v ? esc(v) : `<span class="pending">${label}</span>`;
 const setHTML = (sel, html) => { const el=$(sel); if(el) el.innerHTML=html; };
 const setText = (sel, text) => { const el=$(sel); if(el) el.textContent=text; };
@@ -1163,9 +1182,9 @@ function renderTimeline(){
 
 /* ---------------------------------------------------------- socials */
 function renderSocials(){
-  const live = (CONFIG.socials||[]).filter(s=>s && s.url && String(s.url).trim());
+  const live = (CONFIG.socials||[]).filter(s=>s && safeUrl(s.url));
   setHTML('#socialGrid', live.length
-    ? live.map(s=>`<a class="social rv in" href="${esc(String(s.url).trim())}" target="_blank" rel="noopener" data-cur="link"><b>${esc(s.label||'')}</b><span>${esc(s.note||'')}</span></a>`).join('')
+    ? live.map(s=>`<a class="social rv in" href="${esc(safeUrl(s.url))}" target="_blank" rel="noopener" data-cur="link"><b>${esc(s.label||'')}</b><span>${esc(s.note||'')}</span></a>`).join('')
     : `<div class="card rv in" style="grid-column:1/-1"><h3>No links added yet</h3><p>Accounts appear here once their URLs are added. <span class="pending">social URLs pending</span></p></div>`);
 }
 
@@ -1208,22 +1227,33 @@ function renderAll(){
   try{ renderProjects(); }catch(e){ console.warn(e); }
 }
 
-/* Load Studio-saved content from the API so visitors see the same data. */
+/* Load Studio-saved content so visitors see the same data.
+   Order: the API, then content.json beside this page (written on every Studio
+   save), then the CONFIG embedded above. */
 let hydrateToken = 0;
+function applyContent(data){
+  // Identity is empty only when the Studio has never saved — keep the embedded
+  // CONFIG then. After a save, the lists are authoritative, empty ones included.
+  if(!data || !data.identity || !Object.keys(data.identity).length) return false;
+  Object.assign(CONFIG.identity, data.identity);
+  ['socials','projects','timeline'].forEach(k=>{ if(Array.isArray(data[k])) CONFIG[k] = data[k]; });
+  return true;
+}
 async function hydrateFromApi(){
   const ep = CONFIG.admin && CONFIG.admin.endpoint;
-  if(!ep){ renderAll(); return; }
+  const sources = [];
+  if(ep) sources.push(ep + '/content');
+  if(location.protocol !== 'file:') sources.push('content.json', 'site/content.json');
   const my = ++hydrateToken;
-  try{
-    const r = await fetch(ep + '/content', { cache: 'no-store' });
-    if(!r.ok) throw new Error('content '+r.status);
-    const data = await r.json();
-    if(my !== hydrateToken) return; // a newer hydrate/save won the race
-    if(data.identity) Object.assign(CONFIG.identity, data.identity);
-    if(Array.isArray(data.socials) && data.socials.length) CONFIG.socials = data.socials;
-    if(Array.isArray(data.projects)) CONFIG.projects = data.projects;
-    if(Array.isArray(data.timeline) && data.timeline.length) CONFIG.timeline = data.timeline;
-  }catch(e){ /* keep embedded CONFIG if API unreachable */ }
+  for(const url of sources){
+    try{
+      const r = await fetch(url, { cache: 'no-store' });
+      if(!r.ok) continue;
+      const data = await r.json();
+      if(my !== hydrateToken) return; // a newer hydrate/save won the race
+      if(applyContent(data)) break;
+    }catch(e){ /* unreachable or not JSON — try the next source */ }
+  }
   if(my === hydrateToken) renderAll();
 }
 hydrateFromApi();
@@ -1234,6 +1264,8 @@ function openCase(i){
   if(!p) return;
   const feats = p.features || [];
   const tech = p.tech || [];
+  const shots = [].concat(p.shots||[]).map(safeUrl).filter(Boolean);
+  const github = safeUrl(p.github), demo = safeUrl(p.demo);
   box.innerHTML = `
     <button class="modal-close" id="closeModal" data-cur="link">CLOSE ✕</button>
     <div style="clear:both"></div>
@@ -1246,11 +1278,13 @@ function openCase(i){
     ${p.ai?`<div class="case-block"><h4>AI layer</h4><p>${esc(p.ai)}</p></div>`:''}
     <div class="case-block"><h4>Features</h4>${feats.length?`<ul>${feats.map(f=>`<li>${esc(f)}</li>`).join('')}</ul>`:'<p><span class="pending">pending</span></p>'}</div>
     <div class="case-block"><h4>Technologies</h4><div class="pills">${tech.length?tech.map(t=>`<span class="pill">${esc(t)}</span>`).join(''):'<span class="pending">pending</span>'}</div></div>
-    <div class="case-block"><h4>Screenshots</h4><p>${p.shots?'':'<span class="pending">screenshots pending</span>'}</p></div>
+    <div class="case-block"><h4>Screenshots</h4>${shots.length
+      ? `<div class="shots">${shots.map((s,j)=>`<img src="${esc(s)}" alt="${esc(p.name||'Project')} — screenshot ${j+1}" loading="lazy">`).join('')}</div>`
+      : '<p><span class="pending">screenshots pending</span></p>'}</div>
     <div class="case-block"><h4>Results / impact</h4><p>${p.impact?esc(p.impact):'<span class="pending">metrics pending — only real numbers go here</span>'}</p></div>
     <div class="case-block" style="display:flex;gap:12px;flex-wrap:wrap">
-      ${p.github?`<a class="btn btn-2" href="${esc(p.github)}" target="_blank" rel="noopener" data-cur="link">GitHub</a>`:'<span class="pending">repo link pending</span>'}
-      ${p.demo?`<a class="btn btn-1" href="${esc(p.demo)}" target="_blank" rel="noopener" data-cur="link">Live demo</a>`:'<span class="pending">live demo pending</span>'}
+      ${github?`<a class="btn btn-2" href="${esc(github)}" target="_blank" rel="noopener" data-cur="link">GitHub</a>`:'<span class="pending">repo link pending</span>'}
+      ${demo?`<a class="btn btn-1" href="${esc(demo)}" target="_blank" rel="noopener" data-cur="link">Live demo</a>`:'<span class="pending">live demo pending</span>'}
     </div>`;
   modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); document.body.classList.add('locked');
   $('#closeModal').focus();
@@ -1538,19 +1572,41 @@ $('#sendBtn').addEventListener('click',()=>{
    then edits are saved server-side and the passphrase is verified there.
    ========================================================================== */
 (function(){
-  const box=$('#studio'), body=$('#studioBody'), remote=!!CONFIG.admin.endpoint;
-  let tab='identity', token=null, authed=!remote, dirty=false;
+  const box=$('#studio'), body=$('#studioBody');
+  const ep=CONFIG.admin&&CONFIG.admin.endpoint, remote=!!ep;
+  let tab='identity', token=null, authed=!remote, dirty=false, reachable=null;
+  const MAX_SHOTS=6;
 
   const HINTS={
     identity:'Updates hero name/title/bio, About, and Contact details — same fonts and colors as the live site.',
-    socials:'Paste each URL, then click Apply changes (bottom right). Only accounts with a URL show in “Find me online”. Empty URL = hidden.',
-    projects:'Shows in Projects with the same cards and case-study modal. Fill summary at minimum.',
-    timeline:'Shows in Experience as timeline entries with the same nodes, cards, and pills.',
+    socials:'Paste each URL (https://…), then click Apply changes (bottom right). Only accounts with a URL show in “Find me online”. Empty URL = hidden.',
+    projects:'Shows in Projects with the same cards and case-study modal. Fill summary at minimum. Lists take one item per line. Screenshots are resized on upload — keep to a few per project, every visitor downloads them.',
+    timeline:'Shows in Experience as timeline entries with the same nodes, cards, and pills. Tags take one per line.',
     knowledge:'Everything you write here is indexed into Dogar on Apply — plus Identity, Accounts, Projects, and Timeline from the other tabs. Use this tab for extras: clients, plans, rates, FAQs.',
   };
 
-  $('#studioMode').textContent = remote?'connected':'draft mode';
-  $('#studioMode').classList.toggle('live',remote);
+  // Badge reflects what is actually true: no API, API down, API up, or signed in.
+  const MODES={
+    draft:['draft mode',''], checking:['checking server…',''], offline:['server offline','off'],
+    online:['server online · signed out',''], signed:['signed in','live']
+  };
+  function refreshMode(){
+    const m=!remote?'draft':authed?'signed':reachable===null?'checking':reachable?'online':'offline';
+    const el=$('#studioMode');
+    el.textContent=MODES[m][0];
+    el.className='studio-mode'+(MODES[m][1]?' '+MODES[m][1]:'');
+  }
+  async function ping(){
+    if(!remote) return;
+    const ctl=new AbortController(), timer=setTimeout(()=>ctl.abort(),8000);
+    try{ reachable=(await fetch(ep+'/content',{cache:'no-store',signal:ctl.signal})).ok; }
+    catch(e){ reachable=false; }
+    finally{ clearTimeout(timer); }
+    refreshMode();
+    if(!authed&&!reachable) note('Server unreachable — sign-in and saving will fail until it is back.',true);
+  }
+  refreshMode();
+
   function note(msg,warn){
     const el=$('#studioNote');
     if(!el) return;
@@ -1558,7 +1614,7 @@ $('#sendBtn').addEventListener('click',()=>{
     el.style.color=warn?'var(--red)':'var(--orange)';
   }
   note(remote
-    ? 'Connected. Edit any tab, then Apply changes to publish for every visitor.'
+    ? 'Sign in, edit any tab, then Apply changes to publish for every visitor.'
     : 'Draft mode — Apply updates this browser only until an admin API is connected.');
 
   const TABS=[['identity','Identity'],['socials','Accounts'],['projects','Projects'],['timeline','Timeline'],['knowledge','Dogar’s brain']];
@@ -1573,8 +1629,17 @@ $('#sendBtn').addEventListener('click',()=>{
   const field=(label,path,value,area)=>area
     ? `<label>${label}</label><textarea data-p="${path}">${value?esc(value):''}</textarea>`
     : `<label>${label}</label><input data-p="${path}" value="${value?esc(value):''}">`;
+  // One item per line, so an item may itself contain commas.
+  const listField=(label,path,arr)=>field(label+' (one per line)',path,(arr||[]).join('\n'),1);
+  const check=(label,path,on)=>`<label class="check"><input type="checkbox" data-p="${path}"${on?' checked':''}> ${label}</label>`;
+  const rowTop=(key,i,n,title)=>`<div class="row-top"><b>${esc(title)}</b>
+    <button type="button" class="row-move" data-move="${key}" data-i="${i}" data-d="-1" aria-label="Move up"${i===0?' disabled':''}>↑</button>
+    <button type="button" class="row-move" data-move="${key}" data-i="${i}" data-d="1" aria-label="Move down"${i===n-1?' disabled':''}>↓</button>
+    <button type="button" class="row-del" data-del="${key}" data-i="${i}">remove</button></div>`;
 
   const LIST=['tech','features','tags'];
+  const URLKEYS=['url','github','demo'];
+  const CONTENT_KEYS=['identity','socials','projects','timeline','knowledge'];
 
   function contentPayload(){
     return {
@@ -1610,9 +1675,27 @@ $('#sendBtn').addEventListener('click',()=>{
       }
       const key=parts[parts.length-1];
       if(/^\d+$/.test(key)) return;
+      if(el.type==='checkbox'){ ref[key]=el.checked; return; }
       const v=String(el.value||'').trim();
-      ref[key]=LIST.includes(key) ? v.split(',').map(x=>x.trim()).filter(Boolean) : (v||null);
+      if(LIST.includes(key)) ref[key]=v.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+      // "github.com/me" → "https://github.com/me"; anything with a scheme is kept for validation.
+      else if(URLKEYS.includes(key)) ref[key]=v ? (/^[a-z][a-z0-9+.-]*:/i.test(v)?v:'https://'+v) : null;
+      else ref[key]=v||null;
     });
+  }
+
+  // Links that would render as broken or unsafe hrefs. Returns [[path, where], …].
+  function badLinks(){
+    const ok=u=>!u||/^(https?:\/\/\S+|mailto:\S+)$/i.test(String(u).trim());
+    const bad=[];
+    (CONFIG.socials||[]).forEach((s,i)=>{ if(s&&!ok(s.url)) bad.push([`socials.${i}.url`,`Accounts → ${s.label||'#'+(i+1)}`]); });
+    (CONFIG.projects||[]).forEach((p,i)=>['github','demo'].forEach(k=>{
+      if(p&&!ok(p[k])) bad.push([`projects.${i}.${k}`,`Projects → ${p.name||'#'+(i+1)} (${k})`]);
+    }));
+    return bad;
+  }
+  function flagBad(bad){
+    $$('[data-p]',body).forEach(el=>el.classList.toggle('bad',bad.some(b=>b[0]===el.getAttribute('data-p'))));
   }
 
   function markDirty(){
@@ -1621,18 +1704,72 @@ $('#sendBtn').addEventListener('click',()=>{
   }
 
   function liveAccountCount(){
-    return (CONFIG.socials||[]).filter(s=>s&&s.url&&String(s.url).trim()).length;
+    return (CONFIG.socials||[]).filter(s=>s&&safeUrl(s.url)).length;
   }
+
+  // Downscale in the browser so a phone photo doesn't become a multi-MB payload.
+  function readImage(file,max){
+    return new Promise((resolve,reject)=>{
+      if(!/^image\//.test(file.type)) return reject(new Error(file.name+' is not an image'));
+      const fr=new FileReader();
+      fr.onerror=()=>reject(new Error('Could not read '+file.name));
+      fr.onload=()=>{
+        const img=new Image();
+        img.onerror=()=>reject(new Error('Could not decode '+file.name));
+        img.onload=()=>{
+          const k=Math.min(1,max/Math.max(img.width,img.height));
+          const c=document.createElement('canvas');
+          c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+          const g=c.getContext('2d');
+          g.fillStyle='#0B0D12'; g.fillRect(0,0,c.width,c.height); // transparent PNGs → site background
+          g.drawImage(img,0,0,c.width,c.height);
+          resolve(c.toDataURL('image/jpeg',.85));
+        };
+        img.src=fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  }
+
+  const picker=document.createElement('input');
+  picker.type='file'; picker.accept='image/*'; picker.hidden=true;
+  box.appendChild(picker);
+  let pickFor=null;
+  picker.addEventListener('change',async()=>{
+    const files=[...picker.files], target=pickFor;
+    picker.value=''; pickFor=null;
+    if(!files.length||!target) return;
+    try{
+      let msg='';
+      if(target.kind==='photo'){
+        CONFIG.identity.photo=await readImage(files[0],1000);
+      }else{
+        const p=CONFIG.projects[target.i];
+        if(!p) return;
+        const shots=[].concat(p.shots||[]);
+        const room=Math.max(0,MAX_SHOTS-shots.length);
+        for(const f of files.slice(0,room)) shots.push(await readImage(f,1280));
+        p.shots=shots;
+        if(files.length>room) msg=`Added ${room} of ${files.length} — max ${MAX_SHOTS} screenshots per project.`;
+      }
+      markDirty();
+      if(msg) note(msg+' Unsaved — Apply changes to publish.',false);
+      applyToSite();
+      paint();
+    }catch(err){ note('Image failed: '+(err&&err.message?err.message:err),true); }
+  });
 
   async function pullFull(){
     if(!remote||!token) return;
     try{
-      const r=await fetch(CONFIG.admin.endpoint+'/content/full',{
+      const r=await fetch(ep+'/content/full',{
         headers:{Authorization:'Bearer '+token}
       });
       if(!r.ok) throw new Error();
       const data=await r.json();
-      if(data.identity) Object.assign(CONFIG.identity, data.identity);
+      // Never saved yet → the server holds empty defaults; keep the embedded content to start from.
+      if(!data.identity||!Object.keys(data.identity).length) return;
+      Object.assign(CONFIG.identity, data.identity);
       if(Array.isArray(data.socials)) CONFIG.socials=data.socials;
       if(Array.isArray(data.projects)) CONFIG.projects=data.projects;
       if(Array.isArray(data.timeline)) CONFIG.timeline=data.timeline;
@@ -1667,15 +1804,24 @@ $('#sendBtn').addEventListener('click',()=>{
       tog.addEventListener('touchstart',e=>{ e.preventDefault(); if(!stickyShow) setShown(true); },{passive:false});
       tog.addEventListener('touchend',()=>{ if(!stickyShow) setShown(false); });
       $('#signin').addEventListener('click',async()=>{
+        let r;
         try{
-          const r=await fetch(CONFIG.admin.endpoint+'/login',{method:'POST',headers:{'Content-Type':'application/json'},
+          r=await fetch(ep+'/login',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({passphrase:pass.value})});
-          if(!r.ok) throw new Error();
-          token=(await r.json()).token; authed=true;
-          await pullFull();
-          paint();
-          note('Signed in. Edits apply to the matching section on the site.',false);
-        }catch(e){ $('#gateErr').textContent='That passphrase was not accepted.'; }
+        }catch(e){
+          reachable=false; refreshMode();
+          $('#gateErr').textContent='Could not reach the server — check that the API is running.';
+          return;
+        }
+        reachable=true;
+        if(r.status===429){ $('#gateErr').textContent='Too many attempts — wait a minute and try again.'; return; }
+        if(!r.ok){ $('#gateErr').textContent='That passphrase was not accepted.'; return; }
+        token=(await r.json()).token; authed=true;
+        refreshMode();
+        await pullFull();
+        dirty=false;
+        paint();
+        note('Signed in. Edits apply to the matching section on the site.',false);
       });
       pass.addEventListener('keydown',e=>{ if(e.key==='Enter') $('#signin').click(); });
       return;
@@ -1684,79 +1830,105 @@ $('#sendBtn').addEventListener('click',()=>{
     const hint=`<p class="studio-hint">${HINTS[tab]||''}</p>`;
     const I=CONFIG.identity;
     if(tab==='identity'){
-      body.innerHTML=hint+['name','title','tagline','location','email','phone','availability']
+      const photo=safeUrl(I.photo);
+      body.innerHTML=hint
+        + `<label>photo</label><div class="studio-pic">
+            ${photo?`<img src="${esc(photo)}" alt="Current photo">`:'<span class="pending">no photo</span>'}
+            <button type="button" class="btn btn-2 btn-sm" data-pick="photo">${photo?'Replace photo…':'Choose photo…'}</button></div>`
+        + ['name','title','tagline','location','email','phone','availability']
         .map(k=>field(k,'identity.'+k,I[k])).join('')
         + field('bio (hero)','identity.bio',I.bio,1)
         + field('bio (about)','identity.bioLong',I.bioLong,1);
     }
     if(tab==='socials'){
-      body.innerHTML=hint+(CONFIG.socials||[]).map((x,i)=>`<div class="row"><div class="row-top"><b>${esc(x.label||'Account')}</b>
-        <button type="button" class="row-del" data-del="socials" data-i="${i}">remove</button></div>
+      const L=CONFIG.socials||[];
+      body.innerHTML=hint+L.map((x,i)=>`<div class="row">${rowTop('socials',i,L.length,x.label||'Account')}
         ${field('label','socials.'+i+'.label',x.label)}
         ${field('note','socials.'+i+'.note',x.note)}
         ${field('url','socials.'+i+'.url',x.url)}</div>`).join('')
         + `<button type="button" class="btn btn-2 btn-sm" data-add="socials">+ Add account</button>`;
     }
     if(tab==='projects'){
-      body.innerHTML=hint+(CONFIG.projects||[]).map((x,i)=>`<div class="row"><div class="row-top"><b>${esc(x.name||'Untitled')}</b>
-        <button type="button" class="row-del" data-del="projects" data-i="${i}">remove</button></div>
+      const L=CONFIG.projects||[];
+      body.innerHTML=hint+L.map((x,i)=>{
+        const shots=[].concat(x.shots||[]);
+        return `<div class="row">${rowTop('projects',i,L.length,x.name||'Untitled')}
         ${field('name','projects.'+i+'.name',x.name)}
         ${field('status','projects.'+i+'.status',x.status)}
+        ${check('Confirmed — publish without the “confirm before publishing” marker','projects.'+i+'.confirmed',x.confirmed)}
         ${field('summary','projects.'+i+'.summary',x.summary,1)}
         ${field('problem','projects.'+i+'.problem',x.problem,1)}
         ${field('solution','projects.'+i+'.solution',x.solution,1)}
         ${field('architecture','projects.'+i+'.architecture',x.architecture,1)}
         ${field('ai layer','projects.'+i+'.ai',x.ai,1)}
-        ${field('tech (comma separated)','projects.'+i+'.tech',(x.tech||[]).join(', '))}
-        ${field('features (comma separated)','projects.'+i+'.features',(x.features||[]).join(', '))}
+        ${listField('tech','projects.'+i+'.tech',x.tech)}
+        ${listField('features','projects.'+i+'.features',x.features)}
         ${field('github url','projects.'+i+'.github',x.github)}
         ${field('live demo url','projects.'+i+'.demo',x.demo)}
-        ${field('impact / results','projects.'+i+'.impact',x.impact,1)}</div>`).join('')
+        <label>screenshots (${shots.length}/${MAX_SHOTS})</label>
+        ${shots.length?`<div class="studio-shots">${shots.map((s,j)=>`<div class="studio-shot">
+          <img src="${esc(safeUrl(s))}" alt="Screenshot ${j+1}">
+          <button type="button" data-unshot="${i}" data-j="${j}">remove</button></div>`).join('')}</div>`:''}
+        <button type="button" class="btn btn-2 btn-sm" data-pick="shots" data-i="${i}"${shots.length>=MAX_SHOTS?' disabled':''}>+ Add screenshots</button>
+        ${field('impact / results','projects.'+i+'.impact',x.impact,1)}</div>`;
+      }).join('')
         + `<button type="button" class="btn btn-2 btn-sm" data-add="projects">+ Add project</button>`;
     }
     if(tab==='timeline'){
-      body.innerHTML=hint+(CONFIG.timeline||[]).map((x,i)=>`<div class="row"><div class="row-top"><b>${esc(x.when||'Entry')}</b>
-        <button type="button" class="row-del" data-del="timeline" data-i="${i}">remove</button></div>
+      const L=CONFIG.timeline||[];
+      body.innerHTML=hint+L.map((x,i)=>`<div class="row">${rowTop('timeline',i,L.length,x.when||'Entry')}
         ${field('period','timeline.'+i+'.when',x.when)}
         ${field('title','timeline.'+i+'.title',x.title)}
         ${field('organisation','timeline.'+i+'.org',x.org)}
         ${field('description','timeline.'+i+'.text',x.text,1)}
-        ${field('tags (comma separated)','timeline.'+i+'.tags',(x.tags||[]).join(', '))}</div>`).join('')
+        ${listField('tags','timeline.'+i+'.tags',x.tags)}</div>`).join('')
         + `<button type="button" class="btn btn-2 btn-sm" data-add="timeline">+ Add entry</button>`;
     }
     if(tab==='knowledge'){
-      body.innerHTML=hint+(CONFIG.knowledge||[]).map((x,i)=>`<div class="row"><div class="row-top"><b>${esc(x.t||'Untitled')}</b>
-        <button type="button" class="row-del" data-del="knowledge" data-i="${i}">remove</button></div>
+      const L=CONFIG.knowledge||[];
+      body.innerHTML=hint+L.map((x,i)=>`<div class="row">${rowTop('knowledge',i,L.length,x.t||'Untitled')}
         ${field('title','knowledge.'+i+'.t',x.t)}
         ${field('keywords','knowledge.'+i+'.k',x.k)}
         ${field('content','knowledge.'+i+'.d',x.d,1)}</div>`).join('')
         + `<button type="button" class="btn btn-2 btn-sm" data-add="knowledge">+ Add passage</button>`;
     }
 
-    $$('[data-del]',body).forEach(b=>b.addEventListener('click',()=>{
-      collect();
+    // Structural edits: capture typed values first, change CONFIG, then repaint.
+    const restructure=fn=>{ collect(); fn(); markDirty(); applyToSite(); paint(); };
+    $$('[data-del]',body).forEach(b=>b.addEventListener('click',()=>restructure(()=>{
       const key=b.dataset.del;
       (CONFIG[key]=CONFIG[key]||[]).splice(+b.dataset.i,1);
-      markDirty();
-      applyToSite();
-      paint();
-    }));
+    })));
+    $$('[data-move]',body).forEach(b=>b.addEventListener('click',()=>restructure(()=>{
+      const L=CONFIG[b.dataset.move]||[], i=+b.dataset.i, j=i+(+b.dataset.d);
+      if(j<0||j>=L.length) return;
+      [L[i],L[j]]=[L[j],L[i]];
+    })));
+    $$('[data-unshot]',body).forEach(b=>b.addEventListener('click',()=>restructure(()=>{
+      const p=CONFIG.projects[+b.dataset.unshot];
+      if(p) p.shots=[].concat(p.shots||[]).filter((_,j)=>j!==+b.dataset.j);
+    })));
     $$('[data-add]',body).forEach(b=>b.addEventListener('click',()=>{
-      collect();
       const k=b.dataset.add;
       const blank={
         socials:{label:'New account',note:'',url:null},
-        projects:{name:'New project',status:'',confirmed:true,summary:'',problem:'',solution:'',architecture:'',ai:'',tech:[],features:[],github:null,demo:null,impact:null},
+        projects:{name:'New project',status:'',confirmed:true,summary:'',problem:'',solution:'',architecture:'',ai:'',tech:[],features:[],github:null,demo:null,shots:[],impact:null},
         timeline:{when:'Year',title:'',org:null,text:'',tags:[]},
         knowledge:{t:'New passage',k:'',d:''}
       }[k];
-      (CONFIG[k]=CONFIG[k]||[]).push(blank);
-      markDirty();
-      applyToSite();
-      paint();
+      restructure(()=>(CONFIG[k]=CONFIG[k]||[]).push(blank));
       body.scrollTop=body.scrollHeight;
     }));
-    $$('[data-p]',body).forEach(el=>el.addEventListener('input',markDirty));
+    $$('[data-pick]',body).forEach(b=>b.addEventListener('click',()=>{
+      collect();
+      pickFor={kind:b.dataset.pick,i:+b.dataset.i};
+      picker.multiple=b.dataset.pick==='shots';
+      picker.click();
+    }));
+    $$('[data-p]',body).forEach(el=>{
+      el.addEventListener('input',markDirty);
+      el.addEventListener('change',markDirty);
+    });
   }
 
   let saving=false;
@@ -1766,14 +1938,17 @@ $('#sendBtn').addEventListener('click',()=>{
     saving=true;
     note('Saving…',false);
     try{
+      if(remote&&!authed){ note('Sign in first (Studio password screen).',true); return; }
       collect();
+      const bad=badLinks();
+      flagBad(bad);
+      if(bad.length){ note(`Not saved — ${bad[0][1]}: links must start with https://`,true); return; }
       if(remote){
-        if(!token){ note('Sign in first (Studio password screen).',true); return; }
         hydrateToken++; // stop a slow page-load from wiping this save
-        const r=await fetch(CONFIG.admin.endpoint+'/content',{method:'PUT',
+        const r=await fetch(ep+'/content',{method:'PUT',
           headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
           body:JSON.stringify(contentPayload())});
-        if(r.status===401){ authed=false; token=null; paint(); note('Session expired — sign in again.',true); return; }
+        if(r.status===401){ authed=false; token=null; refreshMode(); paint(); note('Session expired — sign in again. Your edits are still on this page.',true); return; }
         if(!r.ok){
           const t=await r.text().catch(()=> '');
           throw new Error('HTTP '+r.status+(t?': '+t.slice(0,120):''));
@@ -1803,11 +1978,18 @@ $('#sendBtn').addEventListener('click',()=>{
     }
   }
 
-  const saveBtn=$('#studioSave'), exportBtn=$('#studioExport');
+  // Before sign-in, CONFIG holds the copy embedded in this file, not the saved content.
+  const needAuth=what=>{
+    if(remote&&!authed){ note(`Sign in first — ${what} works on your saved content, not the copy built into this page.`,true); return true; }
+    return false;
+  };
+
+  const saveBtn=$('#studioSave'), exportBtn=$('#studioExport'), importBtn=$('#studioImport'), importFile=$('#studioImportFile');
   if(saveBtn) saveBtn.type='button';
   if(exportBtn){
     exportBtn.type='button';
     exportBtn.addEventListener('click',()=>{
+      if(needAuth('Export')) return;
       try{
         collect();
         const blob=new Blob([JSON.stringify(contentPayload(),null,2)],{type:'application/json'});
@@ -1815,6 +1997,29 @@ $('#sendBtn').addEventListener('click',()=>{
         a.href=URL.createObjectURL(blob); a.download='portfolio-content.json'; a.click();
         URL.revokeObjectURL(a.href);
       }catch(err){ note('Export failed: '+(err.message||err),true); }
+    });
+  }
+  if(importBtn&&importFile){
+    importBtn.addEventListener('click',()=>{ if(!needAuth('Import')) importFile.click(); });
+    importFile.addEventListener('change',async()=>{
+      const file=importFile.files[0];
+      importFile.value='';
+      if(!file) return;
+      let data;
+      try{ data=JSON.parse(await file.text()); }
+      catch(err){ note(`Import failed — ${file.name} is not valid JSON.`,true); return; }
+      if(Array.isArray(data)) data={projects:data}; // a bare list is read as projects
+      const isObj=v=>v&&typeof v==='object'&&!Array.isArray(v);
+      const found=isObj(data)?CONTENT_KEYS.filter(k=>k==='identity'?isObj(data[k]):Array.isArray(data[k])):[];
+      if(!found.length){ note(`Import failed — ${file.name} has none of: ${CONTENT_KEYS.join(', ')}.`,true); return; }
+      const label={identity:'Identity',socials:'Accounts',projects:'Projects',timeline:'Timeline',knowledge:'Dogar’s brain'};
+      if(!confirm(`Replace ${found.map(k=>label[k]).join(', ')} with the contents of ${file.name}?\n\nOther tabs stay as they are. Nothing is published until you click Apply changes.`)) return;
+      collect();
+      found.forEach(k=>{ if(k==='identity') Object.assign(CONFIG.identity,data.identity); else CONFIG[k]=data[k]; });
+      markDirty();
+      applyToSite();
+      paint();
+      note(`Imported ${found.map(k=>label[k]).join(', ')} from ${file.name}. Review, then Apply changes to publish.`,false);
     });
   }
   // Single listener on the studio panel (survives focus quirks)
@@ -1826,10 +2031,11 @@ $('#sendBtn').addEventListener('click',()=>{
     box.classList.toggle('open',o);
     box.setAttribute('aria-hidden',String(!o));
     document.body.classList.toggle('locked',o);
-    if(o) paint();
+    if(o){ paint(); if(remote&&!authed) ping(); }
   }
   function closeStudio(){
     try{ if(authed) collect(); }catch(e){}
+    if(dirty&&remote&&!confirm('Your edits are not published yet.\n\nClose anyway? They stay on this page until you refresh, but visitors will not see them.')) return;
     try{ applyToSite(); }catch(e){}
     open_(false);
     if(location.hash==='#studio') history.replaceState(null,'',location.pathname+location.search);
@@ -1840,6 +2046,8 @@ $('#sendBtn').addEventListener('click',()=>{
     if(e.key==='Escape'&&box.classList.contains('open')){ e.preventDefault(); closeStudio(); }
     if(e.ctrlKey&&e.shiftKey&&e.key.toLowerCase()==='e'){ e.preventDefault(); open_(true); }
   });
+  // Refreshing or leaving the page throws away anything not yet applied.
+  addEventListener('beforeunload',e=>{ if(dirty){ e.preventDefault(); e.returnValue=''; } });
   if(location.hash==='#studio') addEventListener('load',()=>open_(true));
 })();
 

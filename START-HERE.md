@@ -31,7 +31,12 @@ from an index built out of the page's own content. No installation, no server.
 
 **The private studio:** press `Ctrl+Shift+E`, or add `#studio` to the URL. Five tabs for
 editing identity, accounts, projects, timeline, and Dogar's knowledge. Changes apply live.
-"Export JSON" saves your content to a file.
+"Export JSON" saves your content to a file; "Import JSON" loads one back (a file holding just a
+list of projects works too). Your photo and project screenshots upload from the Identity and
+Projects tabs, and the ↑ ↓ buttons reorder entries.
+
+If the API is down, the site falls back to `content.json` beside the page (written on every
+studio save), then to the `CONFIG` embedded in `portfolio.html`.
 
 Until the backend is deployed, studio edits last only until you refresh, and the studio is
 *hidden* rather than *secure* — anyone reading the page source could find it. That changes

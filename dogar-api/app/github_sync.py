@@ -19,11 +19,16 @@ log = logging.getLogger("dogar.github_sync")
 
 
 def write_local(content: dict) -> Path | None:
-    """Write site/content.json next to the live portfolio HTML."""
+    """Write site/content.json next to the live portfolio HTML.
+
+    Caddy serves this folder publicly, so Dogar's knowledge is left out — the
+    same rule as the public /api/admin/content route.
+    """
     root = Path(settings.site_path)
     root.mkdir(parents=True, exist_ok=True)
     path = root / "content.json"
-    path.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
+    public = {k: v for k, v in content.items() if k != "knowledge"}
+    path.write_text(json.dumps(public, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
 
 
